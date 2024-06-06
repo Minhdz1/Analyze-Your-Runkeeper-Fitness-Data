@@ -1,189 +1,132 @@
 import pandas as pd
-import numpy as np
-import os
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
+from gtts import gTTS
 
-# 1. Data preprocessing
+
+
 # Đọc dữ liệu từ file CSV
-df = pd.read_csv('random_runkeeper_data_with_dates.csv')
+df = pd.read_csv('runkeeper_data_30_days.csv')
+# Khởi tạo môi trường âm thanh cho pygame
 
-# Chuyển đổi cột 'Date' thành kiểu dữ liệu datetime
-df['Date'] = pd.to_datetime(df['Date'])
+# Kiểm tra và xử lý các giá trị thiếu nếu có
+if df.isnull().values.any():
+    df = df.dropna()  # Loại bỏ các dòng chứa giá trị thiếu
+df['Duration'] = pd.to_timedelta(df['Duration']).dt.total_seconds()
 
-# Xử lý giá trị thiếu nếu có
-df.fillna(df.mean(), inplace=True)
+# Tính toán K-means clustering
+X = df[['Duration', 'Distance (km)']].values
+kmeans = KMeans(n_clusters=3, random_state=42)
+df['Cluster'] = kmeans.fit_predict(X)
 
-# Lưu kết quả sau khi tiền xử lý
-df.to_csv('preprocessed_runkeeper_data.csv', index=False)
-print("Đã tiền xử lý dữ liệu và lưu vào file CSV mới.")
-
-# 2. Plot running data
-plt.figure(figsize=(10, 5))
-plt.scatter(df['Pace (min/km)'], df['Calories (kcal)'], color='blue')
-plt.title('Tốc độ chạy vs Lượng calo tiêu thụ')
-plt.xlabel('Tốc độ chạy (min/km)')
-plt.ylabel('Lượng calo tiêu thụ (kcal)')
-plt.grid(True)
-plt.show()
-
-plt.figure(figsize=(10, 5))
-plt.scatter(df['Pace (min/km)'], df['Duration (min)'], color='green')
-plt.title('Tốc độ chạy vs Thời gian chạy')
-plt.xlabel('Tốc độ chạy (min/km)')
-plt.ylabel('Thời gian chạy (min)')
-plt.grid(True)
-plt.show()
-
-plt.figure(figsize=(10, 5))
-plt.scatter(df['Calories (kcal)'], df['Duration (min)'], color='red')
-plt.title('Lượng calo tiêu thụ vs Thời gian chạy')
-plt.xlabel('Lượng calo tiêu thụ (kcal)')
-plt.ylabel('Thời gian chạy (min)')
-plt.grid(True)
-plt.show()
-
-# 3. Running statistics
-average_pace = df['Pace (min/km)'].mean()
-average_calories = df['Calories (kcal)'].mean()
-average_duration = df['Duration (min)'].mean()
-total_duration = df['Duration (min)'].sum()
-num_runs = df.shape[0]
-
-print("\n*** Thống kê Chạy Bộ ***")
-print(f"Tốc độ chạy trung bình: {average_pace:.2f} min/km")
-print(f"Lượng calo tiêu thụ trung bình: {average_calories:.2f} kcal")
-print(f"Thời gian chạy trung bình: {average_duration:.2f} phút")
-print(f"Tổng thời gian chạy: {total_duration:.2f} phút")
-print(f"Số lần chạy: {num_runs}")
-
-# Thời gian trung bình mỗi ngày chạy
-daily_running_time = df.groupby(pd.to_datetime(df['Date']).dt.date)['Duration (min)'].sum()
-average_daily_running_time = daily_running_time.mean()
-print(f"Thời gian trung bình mỗi ngày chạy: {average_daily_running_time:.2f} phút")
-
-# 4. Visualization with averages
-fig, ax = plt.subplots(3, 1, figsize=(10, 15))
-
-df.groupby(df['Date'].dt.date)['Pace (min/km)'].mean().plot(ax=ax[0], title='Tốc độ chạy trung bình mỗi ngày', color='blue')
-ax[0].set_ylabel('Pace (min/km)')
-
-df.groupby(df['Date'].dt.date)['Calories (kcal)'].mean().plot(ax=ax[1], title='Lượng calo tiêu thụ trung bình mỗi ngày', color='green')
-ax[1].set_ylabel('Calories (kcal)')
-
-df.groupby(df['Date'].dt.date)['Duration (min)'].mean().plot(ax=ax[2], title='Thời gian chạy trung bình mỗi ngày', color='red')
-ax[2].set_ylabel('Duration (min)')
-
+# Biểu đồ cho dữ liệu chạy bộ
+plt.figure(figsize=(10, 6))
+plt.bar(df['Date'], df['Distance (km)'], color='skyblue')
+plt.title('Running Distance Over 30 Days')
+plt.xlabel('Date')
+plt.ylabel('Distance (km)')
+plt.xticks(rotation=45)
+plt.grid(axis='y')
 plt.tight_layout()
-plt.show()
+plt.show(block=False)
 
-# 5. Did I reach my goals?
-days_met_goal = daily_running_time[daily_running_time >= 30].count()
-total_days = daily_running_time.count()
+# Running statistics
+total_distance = df['Distance (km)'].sum()
+total_duration = pd.to_timedelta(df['Duration']).sum()
+average_pace = total_duration / total_distance
 
-print(f"\nSố ngày đạt mục tiêu chạy 30 phút: {days_met_goal} / {total_days} ngày")
+print("Total Distance:", total_distance, "km")
+print("Total Duration:", total_duration)
+print("Average Pace:", average_pace)
 
-# 6. Am I progressing?
-first_week = df[df['Date'] < '2024-01-08']
-last_week = df[df['Date'] >= '2024-01-24']
+# Biểu đồ thể hiện khoảng cách chạy bộ cùng với giá trị trung bình
+plt.figure(figsize=(10, 6))
+plt.bar(df['Date'], df['Distance (km)'], color='skyblue', label='Distance (km)')
+plt.axhline(y=total_distance/len(df), color='r', linestyle='--', label='Average Distance')
+plt.title('Running Distance Over 30 Days with Average')
+plt.xlabel('Date')
+plt.ylabel('Distance (km)')
+plt.xticks(rotation=45)
+plt.legend()
+plt.grid(axis='y')
+plt.tight_layout()
+plt.show(block=False)
 
-average_pace_first_week = first_week['Pace (min/km)'].mean()
-average_pace_last_week = last_week['Pace (min/km)'].mean()
-
-print(f"\nTốc độ chạy trung bình tuần đầu tiên: {average_pace_first_week:.2f} min/km")
-print(f"Tốc độ chạy trung bình tuần cuối cùng: {average_pace_last_week:.2f} min/km")
-
-if average_pace_last_week < average_pace_first_week:
-    print("Bạn đang tiến bộ!")
+# Đạt được mục tiêu chưa?
+goal_distance = 150
+total_distance = df['Distance (km)'].sum()
+if total_distance >= goal_distance:
+    print("Congratulations! You reached your goal of", goal_distance, "km.")
 else:
-    print("Bạn cần cải thiện thêm!")
+    print("You didn't reach your goal of", goal_distance, "km. Keep going!")
 
-# 7. Training intensity
-intensity_levels = pd.cut(df['Pace (min/km)'], bins=[0, 5, 6, 10], labels=['High', 'Medium', 'Low'])
-df['Intensity'] = intensity_levels
+# Tiến triển của bạn
+df['Distance Growth'] = df['Distance (km)'].diff() / df['Distance (km)'].shift(1)
+plt.figure(figsize=(10, 6))
+plt.bar(df['Date'], df['Distance Growth'], color='lightgreen')
+plt.title('Distance Growth Rate Over 30 Days')
+plt.xlabel('Date')
+plt.ylabel('Distance Growth Rate')
+plt.xticks(rotation=45)
+plt.grid(axis='y')
+plt.tight_layout()
+plt.show(block=False)
 
-print("\nPhân bố cường độ tập luyện:")
-print(df['Intensity'].value_counts())
+# Training intensity
+average_heart_rate = df['Average Heart Rate (bpm)'].mean()
+training_intensity = average_heart_rate / average_pace.total_seconds()
 
-# 8. Detailed summary report
-summary_report = {
-    'Tổng số lần chạy': num_runs,
-    'Tổng thời gian chạy (phút)': total_duration,
-    'Tốc độ chạy trung bình (min/km)': average_pace,
-    'Lượng calo tiêu thụ trung bình (kcal)': average_calories,
-    'Thời gian chạy trung bình (phút)': average_duration,
-    'Số ngày đạt mục tiêu chạy 30 phút': f"{days_met_goal} / {total_days}",
-    'Cường độ tập luyện': df['Intensity'].value_counts().to_dict()
+print("Average Heart Rate:", average_heart_rate, "bpm")
+print("Training Intensity:", training_intensity)
+
+# Báo cáo tổng quan chi tiết
+summary_report = df.describe()
+print(summary_report)
+
+# Thông tin thú vị
+fun_facts = {
+    "Total Distance": total_distance,
+    "Max Distance in a Day": df['Distance (km)'].max(),
+    "Min Distance in a Day": df['Distance (km)'].min(),
+    "Average Heart Rate": df['Average Heart Rate (bpm)'].mean(),
+    "Max Steps in a Day": df['Steps'].max(),
+    "Min Steps in a Day": df['Steps'].min()
 }
+print("\nFun Facts:")
+for fact, value in fun_facts.items():
+    print(f"{fact}: {value}")
 
-print("\n*** Báo cáo chi tiết ***")
-for key, value in summary_report.items():
-    print(f"{key}: {value}")
+# Biểu đồ thể hiện tốc độ trung bình qua các ngày
+plt.figure(figsize=(10, 6))
+plt.bar(df['Date'], df['Average Pace (min/km)'], color='lightcoral')
+plt.title('Average Pace Over 30 Days')
+plt.xlabel('Date')
+plt.ylabel('Average Pace (min/km)')
+plt.xticks(rotation=45)
+plt.grid(axis='y')
+plt.tight_layout()
+plt.show(block=False)
 
-# 9. Fun facts
-longest_run = df['Duration (min)'].max()
-most_calories_burned = df['Calories (kcal)'].max()
-best_pace = df['Pace (min/km)'].min()
+# Biểu đồ thể hiện nhịp tim trung bình qua các ngày
+plt.figure(figsize=(10, 6))
+plt.bar(df['Date'], df['Average Heart Rate (bpm)'], color='lightblue')
+plt.title('Average Heart Rate Over 30 Days')
+plt.xlabel('Date')
+plt.ylabel('Average Heart Rate (bpm)')
+plt.xticks(rotation=45)
+plt.grid(axis='y')
+plt.tight_layout()
+plt.show(block=False)
 
-print("\n*** Fun Facts ***")
-print(f"Chạy lâu nhất: {longest_run} phút")
-print(f"Nhiều calo nhất tiêu thụ: {most_calories_burned} kcal")
-print(f"Nhịp độ tốt nhất: {best_pace:.2f} min/km")
-
-# Hiển thị fun facts bằng biểu đồ
-fig, ax = plt.subplots(1, 3, figsize=(15, 5))
-
-# Biểu đồ chạy lâu nhất
-ax[0].bar(['Longest Run'], [longest_run], color='blue')
-ax[0].set_title('Chạy lâu nhất')
-ax[0].set_ylabel('Thời gian (phút)')
-
-# Biểu đồ nhiều calo nhất tiêu thụ
-ax[1].bar(['Most Calories Burned'], [most_calories_burned], color='green')
-ax[1].set_title('Nhiều calo nhất tiêu thụ')
-ax[1].set_ylabel('Lượng calo (kcal)')
-
-# Biểu đồ nhịp độ tốt nhất
-ax[2].bar(['Best Pace'], [best_pace], color='red')
-ax[2].set_title('Nhịp độ tốt nhất')
-ax[2].set_ylabel('Nhịp độ (min/km)')
-
+# Biểu đồ thể hiện số bước chân qua các ngày
+plt.figure(figsize=(10, 6))
+plt.bar(df['Date'], df['Steps'], color='orange')
+plt.title('Steps Over 30 Days')
+plt.xlabel('Date')
+plt.ylabel('Steps')
+plt.xticks(rotation=45)
+plt.grid(axis='y')
 plt.tight_layout()
 plt.show()
 
-# 10. Linear Regression to predict Calories burned
-X = df[['Pace (min/km)', 'Duration (min)']]
-y = df['Calories (kcal)']
-
-# Chia dữ liệu thành tập huấn luyện và tập kiểm tra
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# Huấn luyện mô hình hồi quy tuyến tính
-model = LinearRegression()
-model.fit(X_train, y_train)
-
-# Dự đoán trên tập kiểm tra
-y_pred = model.predict(X_test)
-
-# Đánh giá mô hình
-mse = mean_squared_error(y_test, y_pred)
-print(f"Mean Squared Error: {mse:.2f}")
-
-# Hiển thị kết quả
-plt.figure(figsize=(10, 5))
-plt.scatter(y_test, y_pred)
-plt.plot([y.min(), y.max()], [y.min(), y.max()], 'k--', lw=2)
-plt.title('Calories: True vs Predicted')
-plt.xlabel('True Values (Calories)')
-plt.ylabel('Predicted Values (Calories)')
-plt.grid(True)
-plt.show()
 
